@@ -1,0 +1,220 @@
+---
+title: "Visualización de datos de los primates costarricenses"
+author: "Alexandre Bolaños Umaña"
+date: "28/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Tarea número 03.
+
+## Carné C01229
+
+### Introducción: 
+#### En este trabajo, se creará una tabla, la cual cuenta con los registros de presencia de cuatro especies de primates que habitan nuestro territorio. Las especies son ardilla _(Saimiri oerstedii)_, araña _(Ateles geoffroyi)_, carablanca _(Cebus capucinus)_ y el mono aullador _(Alouatta palliata)_.
+#### Dichas especies de monos, son características de nuestra diversidad biológica, tanto de flora como de fauna, lo cual genera, un panorama atractivo para los turistas que visitan nuestro país.
+
+
+
+# Preparativos. 
+```{r carga-paquetes, message=FALSE, warning=FALSE}
+# Carga de paquetes
+
+library(dplyr)
+library(DT)
+library(plotly)
+library(sf)
+library(leaflet)
+library(raster)
+library(rgdal)
+```
+
+```{r}
+#carga de datos
+primates <-
+  st_read(
+    'https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/gbif/primates-cr-registros.csv',
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ),
+    quiet = TRUE
+  )
+
+
+st_crs(primates) = 4326
+
+# Datos geoespaciales de cantones
+cantones <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_cantones_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+
+
+primates <- 
+  primates %>%
+  st_join(cantones["canton"])
+```
+
+# Tabla de registros de presencia.
+```{r, message=FALSE, warning=FALSE}
+# Tabla de registros de presencia
+primates %>%
+  st_drop_geometry() %>%
+  dplyr::select(family, species, stateProvince, canton, eventDate) %>%
+  datatable(colnames = c(
+    "Familia",
+    "Especie",
+    "Provincia",
+    "Cantón",
+    "Fecha"), 
+    options = list(searchHighlight = TRUE,
+              language = list(url = '//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json'),
+              pageLength = 10),
+    class = 'cell-border stripe'
+           )
+```
+
+
+# Gráfico de registro.
+
+```{r, message=FALSE, warning=FALSE}
+
+# Gráfico 
+plot_ly(primates, labels = ~ species, type = 'pie' 
+  ) %>%
+  layout(title = 'Porcentaje de registro de primates en Costa Rica') %>%
+  config(locale = "es")
+```
+
+
+# Mapa de distribución. 
+### A continuación debemos descargar las capas de altitud.
+```{r, message=FALSE, warning=FALSE}
+alt <- getData(
+  "worldclim",
+  var = "alt",
+  res = .5,
+  lon = -84,
+  lat = 10
+)
+
+# Capa altitud Costa Rica
+altitud <- crop(alt, extent(-86, -82.3, 8, 11.3))
+
+# Paleta de colores
+pal <- colorNumeric(
+  c("#006400", "#FFFF00", "#3F2817"), 
+  values(altitud), 
+  na.color = "transparent"
+)
+```
+
+### Seguidamente, debemos crear variables _y filtrarlas_. 
+```{r, message=FALSE, warning=FALSE}
+
+Ateles_geoffroyi <- primates %>%
+  filter(species == "Ateles geoffroyi")
+
+Alouatta_palliata <- primates %>%
+  filter(species == "Alouatta palliata")
+
+Cebus_capucinus <- primates %>%
+  filter(species == "Cebus capucinus")
+
+Saimiri_oerstedii <- primates %>%
+  filter(species == "Saimiri oerstedii")
+```
+
+### Seguido a esto, crearemos el mapa.
+```{r, message=FALSE, warning=FALSE}
+# Mapa de porcentajes con registros de presencia
+primates %>%
+  dplyr::select(stateProvince,
+         canton,
+         eventDate,
+         species) %>%
+  leaflet() %>%
+  addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OpenStreetMap") %>%
+   addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Imágenes de ESRI") %>%
+  addCircleMarkers(
+    data = Ateles_geoffroyi,
+    stroke = F,
+    radius = 4,
+    fillColor = '#0b5166',
+    fillOpacity = 1,
+    popup = paste(
+      primates$stateProvince,
+      primates$canton,
+      primates$eventDate,
+      primates$species,
+      sep = '<br/>'
+    ),
+    group = "Ateles geoffroyi"
+  ) %>%
+  addCircleMarkers(
+    data = Alouatta_palliata,
+    stroke = F,
+    radius = 4,
+    fillColor = '#66610b',
+    fillOpacity = 1,
+    popup = paste(
+      primates$stateProvince,
+      primates$canton,
+      primates$eventDate,
+      primates$species,
+      sep = '<br/>'
+    ),
+    group = "Alouatta palliata"
+  ) %>%
+  addCircleMarkers(
+    data = Cebus_capucinus,
+    stroke = F,
+    radius = 4,
+    fillColor = '#660b5b',
+    fillOpacity = 1,
+    popup = paste(
+      primates$stateProvince,
+      primates$canton,
+      primates$eventDate,
+      primates$species,
+      sep = '<br/>'
+    ),
+    group = "Cebus capucinus"
+  ) %>%
+  addCircleMarkers(
+    data = Saimiri_oerstedii,
+    stroke = F,
+    radius = 4,
+    fillColor = '#0b663d',
+    fillOpacity = 1,
+    popup = paste(
+      primates$stateProvince,
+      primates$canton,
+      primates$eventDate,
+      primates$species,
+      sep = '<br/>'
+    ),
+    group = "Saimiri oerstedii"
+  ) %>%
+  addRasterImage(
+    altitud,
+    colors = pal,
+    opacity = 0.8,
+    group = "Altitud"
+  ) %>%
+  addLayersControl(
+    baseGroups = c("OpenStreetMap", "Imágenes de ESRI", "Stamen Toner Lite"),
+    overlayGroups = c("Altitud", "Ateles geoffroyi", "Alouatta palliata", "Cebus capucinus", "Saimiri oerstedii")
+  ) %>%
+  addMiniMap(
+    tiles = providers$Stamen.OpenStreetMap.Mapnik,
+    position = "bottomleft",
+    toggleDisplay = TRUE
+  )
+```
+
